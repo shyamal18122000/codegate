@@ -1,10 +1,12 @@
-# Implementation Plan: Code Reviewer v3.1 (Multi-Agent, Docker-Based, Two-Phase)
+# Implementation Plan: CodeGate v3.1 (Multi-Agent, Docker-Based, Two-Phase)
+
+> **Note:** This is a historical implementation plan from the initial build phase. Paths and file references below may not reflect the current state of the repository. For current architecture details, see [docs/architecture.md](docs/architecture.md).
 
 ## Overview
 
-A Docker-based code review product with two phases: (1) an LLM agent (Codex/Claude/Gemini) reads PR code and writes `findings.json`, (2) a deterministic Python script scores, deduplicates, and posts comments to ADO or GitHub. The old codebase at `C:\2_WorkSpace\BluB0X\BBX_AI - Doer\Pipelines\CodeReviewer\src\` provides battle-tested ADO activities, scoring, and models that get ported into the new structure.
+A Docker-based code review product with two phases: (1) an LLM agent (Codex/Claude/Gemini) reads PR code and writes `findings.json`, (2) a deterministic Python script scores, deduplicates, and posts comments to ADO or GitHub. The old codebase provided battle-tested ADO activities, scoring, and models that were ported into the new structure.
 
-**Target directory:** `C:\2_WorkSpace\Fleet_Projects\code-reviewer\`
+**Repository:** `https://github.com/shyamal18122000/codegate`
 
 ## Requirements
 

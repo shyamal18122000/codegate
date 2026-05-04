@@ -32,7 +32,7 @@ The agent checks `.codereview/` directory first; falls back to legacy root-level
 ```
 /workspace/.codereview.md              # Project coding conventions and focus areas
 /workspace/.codereview.yml             # Gate thresholds (min_star_rating, fail_on_critical)
-/workspace/AGENTS.md                   # Agent configuration for this repo
+/workspace/CLAUDE.md                   # Agent configuration for this repo (copied from PROJECT-CLAUDE.md)
 /workspace/.cr/signature_map.json      # Pre-computed function signatures for duplicate detection
 ```
 

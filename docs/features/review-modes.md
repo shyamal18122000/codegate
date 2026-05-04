@@ -2,7 +2,7 @@
 
 ## Overview
 
-CodeGate supports 6 review modes. The agent auto-detects the active mode(s) from changed file paths and PR labels. Multiple modes can be active simultaneously; mode multipliers stack using independent checks (the strictest multiplier per finding wins).
+CodeGate supports 6 review modes. Four modes have dedicated prompt files; architecture and performance modes are handled via scoring multipliers only (no dedicated prompt files yet). The agent auto-detects the active mode(s) from changed file paths and PR labels. Multiple modes can be active simultaneously; mode multipliers stack using independent checks (the strictest multiplier per finding wins).
 
 ## Modes
 
@@ -10,8 +10,8 @@ CodeGate supports 6 review modes. The agent auto-detects the active mode(s) from
 |------|------|-------------------|
 | standard | `commands/review-mode-standard.md` | Default; active when no other mode is detected |
 | security | `commands/review-mode-security.md` | Auth/crypto files, secrets patterns in diff |
-| architecture | `commands/review-mode-architecture.md` | Interface files, API contracts, breaking changes |
-| performance | `commands/review-mode-performance.md` | Hot paths, queries, memory-sensitive code |
+| architecture | _(scoring multiplier only)_ | Interface files, API contracts, breaking changes |
+| performance | _(scoring multiplier only)_ | Hot paths, queries, memory-sensitive code |
 | migration | `commands/review-mode-migration.md` | `.sql` files, migration scripts, DDL changes |
 | docs/chore | `commands/review-mode-docs-chore.md` | Only `.md`/`.yml`/`.json` files changed, or PR label "docs"/"chore" |
 
@@ -53,6 +53,8 @@ Code can opt out of review using inline markers. The agent checks for these befo
 | `# cr: ignore-block start` ... `# cr: ignore-block end` | Skip the entire block |
 
 Intent markers work across all languages. The comment prefix (`#`, `//`, `/* */`) is language-appropriate; the `cr:` keyword is the detection signal.
+
+When the agent encounters an intent marker, the finding is moved to `suppressed_findings[]` in findings.json with `dismissed_id: "intent-marker"`. Phase 2 (`post_findings.py`) classifies these into the `intent_marker` bucket and displays the count in the summary. See [post-findings.md](post-findings.md) for the full suppression flow.
 
 ## Per-Module Mode Forcing
 

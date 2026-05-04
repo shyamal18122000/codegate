@@ -31,7 +31,7 @@ The agent also runs **fix verification** (Step 6 of `review-pr-core.md`):
 When `fix_verifications[]` is present in `findings.json`, `post_findings.py`:
 1. Resolves/closes threads for `fixed` items (ADO: `PostFixReplyActivity`; GitHub: reply with "Fixed" via `gh api`).
 2. Zeros penalty for `justified` items.
-3. Downgrades severity for `deferred` items (`critical` -> `warning`, `warning` -> `suggestion`, `suggestion` -> `good`).
+3. Downgrades severity for `deferred` items (`critical` -> `warning`, `warning` -> `suggestion`, `suggestion` stays `suggestion`).
 4. Leaves `still_present` threads open.
 5. Generates a before/after score comparison using `ScoreComparisonService`.
 6. Includes the score comparison in the updated summary comment.
@@ -96,12 +96,11 @@ When `fix_verifications[]` is present in `findings.json`, `post_findings.py`:
 
 ## Configuration
 
-Two config knobs in `.codereview.yml` control the behavior:
+One config knob in `.codereview.yml` controls the behavior:
 
 | Key | Default | Description |
 |-----|---------|-------------|
-| `allow_deferred` | `true` | Whether `deferred` status is accepted. When `false`, deferred findings retain full penalty. |
-| `require_justification_evidence` | `false` | When `true`, `justified` status requires the developer to cite specific evidence (code comment, ticket, or doc link). Without evidence, the finding retains full penalty. |
+| `allow_deferred` | `true` | Whether `deferred` status is accepted. When `false`, deferred findings retain full penalty (treated as `still_present`). |
 
 ## GitHub Resolution
 

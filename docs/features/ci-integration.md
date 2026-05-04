@@ -48,9 +48,9 @@ Triggers on `pull_request` events: opened, synchronize, reopened.
 
 `entrypoint.sh` orchestrates the full review pipeline:
 
-1. **Signature extraction** -- runs `python tools/extract_signatures.py` on the workspace to build `/workspace/.cr/signatures.json` for duplicate detection. This runs before the agent so the signature map is available during review.
+1. **Signature extraction** -- runs `python3 tools/extract_signatures.py /workspace/src > /workspace/.cr/signature_map.json` for duplicate detection. This runs before the agent so the signature map is available during review.
 2. **Phase 1: Agent dispatch** -- runs the selected agent (`$AGENT` env var) with the appropriate CLI and API key.
-3. **Phase 2: Post findings** -- runs `python src/post_findings.py` with all arguments forwarded from env vars.
+3. **Phase 2: Post findings** -- runs `python src/post_findings.py --findings <path> --workspace /workspace --commit-id <sha>`. PR identity (pr_id, repo, vcs) is read from findings.json.
 
 The `tools/` directory is included in the Docker image alongside `commands/`, `src/`, and `templates/`.
 

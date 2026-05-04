@@ -5,7 +5,7 @@ AI-powered code review for pull requests. CodeGate runs as a Docker container in
 ## Key Features
 
 - **Two-phase architecture** -- LLM agent writes findings; deterministic Python engine scores and posts. The agent never touches VCS APIs; the poster never touches the LLM.
-- **Six review modes** -- standard, security, architecture, performance, migration, docs/chore. Auto-detected from file paths and PR labels; modes stack.
+- **Six review modes** -- standard, security, architecture, performance, migration, docs/chore. Auto-detected from file paths and PR labels; modes stack. Four modes have dedicated prompt files; architecture and performance modes apply scoring multipliers only.
 - **Penalty-based scoring** -- 1-5 star rating with per-category penalty breakdown. Size-normalized via `sqrt(file_count)` for fair comparison across PRs.
 - **Fix verification** -- on re-push, classifies prior findings as fixed, still_present, not_relevant, justified, or deferred. Before/after score comparison in summary.
 - **Learning system** -- dismissed findings (`.codereview/dismissed.jsonl`), learned patterns, per-module config. Auto-generates patterns after 3 dismissals. `cr learn` CLI for manual management.

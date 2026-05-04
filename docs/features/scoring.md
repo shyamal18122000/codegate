@@ -28,28 +28,54 @@ The `PRScore` object includes both the emoji string (`overall_stars`) and a nume
 
 ## Mode Multipliers
 
-`PRScorer.apply_mode_multipliers(findings, review_modes)` modifies penalty values before summing. Multipliers use independent `if` blocks so they stack when multiple modes are active:
+`PRScorer.apply_mode_multipliers(findings, review_modes)` adjusts finding severities before scoring. It returns a **new list** of Finding objects — the original list is not mutated.
+
+### Mode Stacking
+
+Multipliers use **independent `if` blocks** (not `elif`), so multiple modes stack when active simultaneously. This was a deliberate fix from an earlier `elif` chain that only applied the first matching mode. Now a PR with both security and migration modes active will have security findings elevated to critical by migration mode *and* doubled by security mode.
+
+For each finding, all matching mode checks fire independently. The strictest (highest severity) result across all candidates wins:
 
 ```python
-# Each mode check is independent (not elif):
+# Migration dominates — elevates everything to critical
 if 'migration' in modes:
-    adjusted_severity = 'critical'
-if 'security' in modes and f.category == 'security':
-    adjusted_severity = max_severity(adjusted_severity, 'critical')
-if 'performance' in modes and f.category == 'performance':
-    adjusted_severity = max_severity(adjusted_severity, 'critical')
-if 'architecture' in modes and f.category in ('best_practices', 'architecture'):
-    adjusted_severity = max_severity(adjusted_severity, 'warning')
+    severity = 'critical'
+else:
+    candidates = [f.severity]
+    # Security: warning -> critical for security-category findings
+    if 'security' in modes and f.category == 'security':
+        if f.severity == 'warning': candidates.append('critical')
+    # Performance: warning -> critical for performance-category findings
+    if 'performance' in modes and f.category == 'performance':
+        if f.severity == 'warning': candidates.append('critical')
+    # Architecture: suggestion -> warning for best_practices/architecture findings
+    if 'architecture' in modes and f.category in ('best_practices', 'architecture'):
+        if f.severity == 'suggestion': candidates.append('warning')
+    severity = max(candidates, key=severity_order)
 ```
 
-When multiple multipliers apply to the same finding, the strictest (highest severity) result is used.
+### Multiplier Table
 
-| Mode | Affected category | Multiplier |
-|------|------------------|------------|
-| security | security | x2 |
-| performance | performance | x2 |
-| architecture | best_practices | x1.5 |
-| migration | all | elevate to minimum critical |
+| Mode | Affected category | Effect |
+|------|------------------|--------|
+| security | security | `warning` -> `critical` |
+| performance | performance | `warning` -> `critical` |
+| architecture | best_practices, architecture | `suggestion` -> `warning` |
+| migration | all categories | all severities elevated to `critical` |
+
+## Tier-Aware Tool Budget
+
+The agent's tool call budget scales with PR size. Tier is assessed by the agent based on the number of changed files:
+
+| Tier | Files Changed | Tool Call Budget |
+|------|--------------|-----------------|
+| T1 | 1-3 | 25 |
+| T2 | 4-10 | 40 |
+| T3 | 11-25 | 60 |
+| T4 | 26-50 | 80 |
+| T5 | 51+ | 100 |
+
+The tier is recorded in `findings.json` and the `tool_calls` field tracks actual usage for monitoring.
 
 ## PR Size Normalization
 
@@ -105,9 +131,9 @@ When a developer replies to a finding with a justification and the agent marks i
 When a developer acknowledges a finding but defers the fix (marked `deferred`), the severity is downgraded one level:
 - `critical` -> `warning`
 - `warning` -> `suggestion`
-- `suggestion` -> `good` (zero penalty)
+- `suggestion` -> `suggestion` (unchanged — already lowest actionable severity)
 
-This reduces the penalty by approximately 50% while still reflecting that the issue exists.
+This reduces the penalty for critical and warning findings by approximately 50% while still reflecting that the issue exists.
 
 ## Score Comparison (Re-push)
 
@@ -121,6 +147,10 @@ Improvement: +1 star -- 2 findings resolved
 
 This comparison is included in the PR summary comment on re-push.
 
+## Schema Versioning
+
+`findings.json` includes a `schema_version` field (string, currently `"1.0"`). The poster validates this in `run()` and rejects files with a mismatched version, ensuring Phase 1 and Phase 2 stay in sync across container upgrades.
+
 ## Zero-Finding Baseline
 
 0 findings = 5 stars. The scorer never exceeds 5 stars even with "good" signals.
@@ -129,12 +159,13 @@ This comparison is included in the PR summary comment on re-push.
 
 ```python
 from pr_scorer import PRScorer
-scorer = PRScorer(settings)
-scorer.apply_mode_multipliers(findings, review_modes=["security"])
-result = scorer.calculate_pr_score(findings)
-# result.star_rating: int 1-5
-# result.star_count: int 1-5
-# result.penalty_total: float
-# result.normalized_penalty: float
-# result.findings_by_severity: dict
+scorer = PRScorer(penalty_matrix=penalty_matrix, star_thresholds=star_thresholds)
+adjusted = scorer.apply_mode_multipliers(findings, review_modes=["security"])
+result = scorer.calculate_pr_score(adjusted)
+# result.star_count: int (1-5)
+# result.overall_stars: str (emoji string)
+# result.total_penalty: float
+# result.quality_level: str ("Perfect", "Excellent", etc.)
+# result.category_penalties: dict
+# result.issues_by_severity: dict
 ```

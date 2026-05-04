@@ -42,7 +42,7 @@ COPY src/ /app/src/
 COPY commands/ /app/commands/
 COPY templates/ /app/templates/
 COPY tools/ /app/tools/
-COPY AGENTS.md /app/AGENTS.md
+COPY PROJECT-CLAUDE.md /app/PROJECT-CLAUDE.md
 COPY entrypoint.sh /app/entrypoint.sh
 RUN chmod +x /app/entrypoint.sh
 

@@ -11,7 +11,7 @@ CodeGate is a Docker-based AI code review system. An LLM agent (Codex, Claude, o
 **Phase 1 -- Agent review**
 The agent runs inside a Docker container with access to the workspace. It reads the PR diff and changed files using VCS tools, then writes `/workspace/.cr/findings.json`. The agent does not post anything.
 
-Before the agent runs, the Docker entrypoint executes `tools/extract_signatures.py` to build a signature map for duplicate detection. The signature map is written to `/workspace/.cr/signatures.json` and made available to the agent in Step 5b-duplication.
+Before the agent runs, the Docker entrypoint executes `tools/extract_signatures.py` to build a signature map for duplicate detection. The signature map is written to `/workspace/.cr/signature_map.json` (via stdout redirection) and made available to the agent in Step 5b-duplication.
 
 **Phase 2 -- Deterministic posting**
 `post_findings.py` reads `findings.json`, applies the full filter pipeline (confidence filter, dismissed-findings matching, rules compliance check, cap, dedup, suppression classification), scores the PR with size normalization, posts inline comments, handles fix verifications (including justified/deferred statuses), writes back learned dismissals, tracks partial failures via a posting journal, and updates the summary. This phase is fully deterministic and testable without a live LLM.
@@ -129,12 +129,15 @@ Per-module config files (`.codereview/modules/*.yml`) support:
 
 ### Write Path
 
-When fix verification marks a finding as `justified`, the poster auto-detects the dismissal and persists it to `dismissed.jsonl` with:
+When fix verification marks a finding as `justified`, the poster detects the dismissal via `_detect_dismissals` and merges it with existing entries via `_merge_dismissals`:
+- Each dismissal gets a stable `dismissed_id` (`d-` + SHA1 of `file:category:title`)
 - `dismiss_count` tracking (increments on repeated dismissals)
-- Scope escalation: file-level dismissal escalates to module-level at `dismiss_count >= 3`
-- Auto-pattern generation: when `dismiss_count >= 3` at module level, a learned pattern is written to `learned-patterns.jsonl`
+- Scope escalation: file-level dismissal (`file_pattern` = exact path) escalates to module-level (`file_pattern` = parent dir glob) at `dismiss_count >= 3`
+- Auto-pattern generation via `_generate_learned_patterns`: when module-level dismissals reach count >= 3, a learned pattern with `confidence_modifier: -0.3` is written to `learned-patterns.jsonl`
 
-The `learning_delivery` config controls how learning artifacts are delivered: `comment` (default, posted as PR comment), `commit` (committed to repo), or `none` (disabled).
+The `learning_delivery` config in `.codereview/config.yml` controls how learning artifacts are delivered: `comment` (default, posted as PR comment), `commit` (committed to repo), or `none` (disabled).
+
+**Note:** The helper functions for learning write-back (`_detect_dismissals`, `_merge_dismissals`, `_generate_learned_patterns`, `_build_learning_comment_md`, `_post_learning_comment`) are implemented but the file write-back and comment posting are not yet wired into the main `run()` flow. Dismissal detection and merging occur, but results are computed without being persisted.
 
 ---
 
@@ -154,7 +157,7 @@ Rules produce findings with `source: "rule"` and are tracked in the `rules_check
 
 ## Duplicate Detection
 
-`tools/extract_signatures.py` runs in the Docker entrypoint before Phase 1. It uses AST parsing to extract function/method signatures and computes `body_hash` values (normalized: whitespace and variable names stripped). The output is `/workspace/.cr/signatures.json`.
+`tools/extract_signatures.py` runs in the Docker entrypoint before Phase 1. It uses AST parsing to extract function/method signatures and computes `body_hash` values (normalized: whitespace and variable names stripped). The output is `/workspace/.cr/signature_map.json` (via stdout redirection).
 
 The agent consumes the signature map in Step 5b-duplication. If the signature map is unavailable, the agent falls back to `rg`-based similarity search.
 
@@ -165,23 +168,23 @@ The agent consumes the signature map in Step 5b-duplication. If the signature ma
 `findings.json` is the contract between Phase 1 and Phase 2. Schema is defined in `commands/findings-schema.json`.
 
 **Top-level fields:**
-- `schema_version` -- integer version of the findings.json schema
-- `pr_id`, `repo`, `project`, `vcs` -- PR identity
+- `schema_version` -- version string of the findings.json schema (e.g., `"1.0"`)
+- `pr_id`, `repo`, `vcs` -- PR identity (`vcs` is `"ado"` or `"github"`)
 - `review_modes` -- list of active modes (standard, security, migration, docs/chore, architecture, performance)
-- `tier` -- T1-T5 scale tier assessed by the agent
-- `agent`, `model`, `tool_calls` -- observability metadata
-- `existing_cr_ids` -- cr-ids already posted before this run (agent reads these)
+- `agent`, `tool_calls` -- observability metadata (`agent` is `"codex"`, `"claude"`, or `"gemini"`)
 - `findings[]` -- list of Finding objects
 - `fix_verifications[]` -- list of FixVerification objects (only on re-push)
-- `suppressed_findings[]` -- findings removed by the filter pipeline, classified by suppression source
-- `rules_checked[]` -- array of rule IDs that were evaluated
-- `token_usage` -- object with `prompt_tokens`, `completion_tokens`, `total_tokens`, `estimated_cost`
+- `suppressed_findings[]` -- findings suppressed by intent markers, dismissal patterns, or never-flag rules
+- `rules_checked[]` -- array of RuleChecked objects (id, applied_to, findings_generated)
+- `token_usage` -- object with `input_tokens` and `output_tokens` (integers); cost is computed by the poster using the `MODEL_PRICING` table
 
-**Finding fields:** `cr_id` (null from agent, filled by poster), `file`, `line`, `line_range`, `severity`, `category`, `confidence`, `title`, `body`, `suggestion`, `trace`
+**Finding fields:** `id` (null from agent, filled by poster via SHA1 hash), `file`, `line`, `severity`, `category`, `confidence`, `title`, `message`, `suggestion` (optional)
 
-**FixVerification fields:** `cr_id`, `status` (fixed | still_present | not_relevant | justified | deferred), `reason`, `counter_reason` (developer's argument), `developer_reply` (raw reply text)
+**FixVerification fields:** `cr_id`, `status` (fixed | still_present | not_relevant | justified | deferred), `reason`, `counter_reason` (developer's argument, optional), `developer_reply` (raw reply text, optional)
 
-**PRScore fields (in summary):** includes `star_count` (integer 1-5) alongside the star emoji string
+**SuppressedFinding fields:** `id`, `file`, `line`, `category`, `title`, `reason`, `dismissed_id` (classification key: `"intent-marker"`, `"never-flag"`, or a cr-id for dismissed patterns), `severity` (optional)
+
+**PRScore fields (in summary):** `total_penalty`, `overall_stars` (emoji string), `star_count` (integer 1-5), `quality_level`, `category_penalties`, `category_stars`, `issues_by_severity`
 
 ---
 
@@ -190,12 +193,14 @@ The agent consumes the signature map in Step 5b-duplication. If the signature ma
 `post_findings.py` applies filters via `_run_filter_pipeline`, which tracks drop reasons for each finding:
 
 1. **Confidence filter** -- drop findings below 0.7 (configurable via `.codereview.yml`)
-2. **Dismissed matching** -- match against `.codereview/dismissed.jsonl` (glob, category, regex). Matched findings are suppressed and recorded in `suppressed_findings[]` with `source: "dismissed"`.
-3. **Rules compliance** -- apply `.codereview-rules.yml` rules. Rule violations are added as findings; rules compliance summary is generated.
-4. **Cap** -- max 30 findings total, max 5 per file. When over cap, prioritize by severity (critical -> warning -> suggestion -> good). Capped findings recorded with `source: "cap"`.
-5. **Dedup** -- skip findings whose cr-id already appears in existing PR threads. Recorded with `source: "dedup"`.
+2. **Per-file cap** -- max 5 findings per file, prioritized by severity (critical -> warning -> suggestion)
+3. **Total cap** -- max 30 findings total, prioritized by severity
 
-Pipeline stats are logged for transparency: total findings in, findings posted, findings suppressed by each source.
+Dedup happens after the pipeline by comparing cr-ids against existing VCS threads and the posting journal (`.cr/posted.jsonl`).
+
+Dismissed matching, rules compliance, and per-module config are Phase 1 (agent) responsibilities. The agent populates `suppressed_findings[]` and `rules_checked[]` in findings.json. The poster classifies suppressed findings into three buckets using the `dismissed_id` field: `intent_marker`, `dismissed_pattern`, and `never_flag`.
+
+Pipeline stats (`drop_stats`) are returned for transparency: `total_produced`, `dropped_confidence`, `dropped_per_file_cap`, `dropped_total_cap`, `suppressed`, `posted`.
 
 ---
 
@@ -207,20 +212,18 @@ Pipeline stats are logged for transparency: total findings in, findings posted, 
 
 ## Cost Tracking
 
-`findings.json` includes a `token_usage` object:
+`findings.json` includes a `token_usage` object with raw token counts:
 
 ```json
 {
   "token_usage": {
-    "prompt_tokens": 12500,
-    "completion_tokens": 3200,
-    "total_tokens": 15700,
-    "estimated_cost": "$0.23"
+    "input_tokens": 12500,
+    "output_tokens": 3200
   }
 }
 ```
 
-Cost estimation uses a `MODEL_PRICING` table in `post_findings.py` that maps model names to per-token rates.
+The poster computes cost estimates using the `MODEL_PRICING` table in `post_findings.py`, which maps agent names (`codex`, `claude`, `gemini`) to per-million-token input/output rates. The estimated cost (e.g., `"$0.2300"`) is included in the summary comment and CI output JSON.
 
 ---
 
@@ -242,7 +245,7 @@ Base image: `node:22-slim`. Layers:
 - GitHub CLI (`gh`)
 - NPM globals: `@openai/codex`, `repomix`
 - Python venv: `azure-devops`, `pydantic`, `pydantic-settings`, `msrest`
-- Copied into image: `commands/`, `src/`, `tools/`, `templates/`, `AGENTS.md`
+- Copied into image: `commands/`, `src/`, `tools/`, `templates/`, `PROJECT-CLAUDE.md`
 
 `PYTHONPATH` points to `/app/src`. `entrypoint.sh` orchestrates: signature extraction (`tools/extract_signatures.py`), Phase 1 (agent dispatch by `$AGENT` env var), and Phase 2 (`post_findings.py` invocation).
 

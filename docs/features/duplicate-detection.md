@@ -10,7 +10,7 @@ Duplicate detection identifies copy-paste code in the PR before the LLM agent ru
 entrypoint.sh
   |
   v
-tools/extract_signatures.py    -->  /workspace/.cr/signatures.json
+tools/extract_signatures.py    -->  /workspace/.cr/signature_map.json
   |
   v
 Agent Step 5b-duplication      -->  Findings for duplicated code
@@ -25,43 +25,34 @@ The extractor uses Python's `ast` module (and equivalent parsers for other langu
 3. For each function, compute a `body_hash`:
    - Strip whitespace normalization
    - Normalize variable names (replace local variable names with positional placeholders)
-   - Hash the normalized body with SHA256
+   - Hash the normalized body with SHA-1 (first 8 hex chars)
 4. Record the function signature: name, file, line, parameters, `body_hash`
-5. Write all signatures to `/workspace/.cr/signatures.json`
+5. Write all signatures to `/workspace/.cr/signature_map.json` (via stdout redirection)
 
 ### Signature Map Format
 
+The output is a flat JSON array of signature objects:
+
 ```json
-{
-  "signatures": [
-    {
-      "name": "validate_input",
-      "file": "src/auth/login.py",
-      "line": 42,
-      "params": ["username", "password"],
-      "body_hash": "a1b2c3d4e5f6..."
-    },
-    {
-      "name": "validate_user_input",
-      "file": "src/api/register.py",
-      "line": 15,
-      "params": ["user", "pass"],
-      "body_hash": "a1b2c3d4e5f6..."
-    }
-  ],
-  "duplicates": [
-    {
-      "body_hash": "a1b2c3d4e5f6...",
-      "locations": [
-        {"file": "src/auth/login.py", "line": 42, "name": "validate_input"},
-        {"file": "src/api/register.py", "line": 15, "name": "validate_user_input"}
-      ]
-    }
-  ]
-}
+[
+  {
+    "file": "src/auth/login.py",
+    "name": "validate_input",
+    "line": 42,
+    "params": [{"name": "username"}, {"name": "password"}],
+    "body_hash": "a1b2c3d4"
+  },
+  {
+    "file": "src/api/register.py",
+    "name": "validate_user_input",
+    "line": 15,
+    "params": [{"name": "user"}, {"name": "pass"}],
+    "body_hash": "a1b2c3d4"
+  }
+]
 ```
 
-The `duplicates` array groups functions that share the same `body_hash` -- these are candidates for consolidation.
+Functions with the same `body_hash` are duplicates -- candidates for consolidation.
 
 ### Body Hash Normalization
 
@@ -75,14 +66,14 @@ The normalization process ensures that trivially different copies are detected:
 | Different parameter names | Yes | Parameters replaced with positional placeholders |
 | Different function names | Yes | Function name excluded from hash |
 | Different logic | No | Different control flow produces different hash |
-| Different string literals | No | String content is preserved in hash |
+| Different string literals | Yes | All string constants replaced with `""` before hashing |
 
 ## Agent Step 5b-duplication
 
 After the agent reads a file (Step 5a), it checks for duplicates:
 
-1. If `/workspace/.cr/signatures.json` exists, load it
-2. For the current file, look up any functions whose `body_hash` appears in the `duplicates` array
+1. If `/workspace/.cr/signature_map.json` exists, load it
+2. For the current file, look up any functions whose `body_hash` matches another entry in the signature map
 3. If duplicates are found across files, create a finding:
    - Severity: `suggestion` (or `warning` if >2 copies)
    - Category: `best_practices`
@@ -104,7 +95,7 @@ The signature extraction runs in `entrypoint.sh` before Phase 1:
 
 ```bash
 # Step 0: Extract function signatures for duplicate detection
-python /app/tools/extract_signatures.py /workspace --output /workspace/.cr/signatures.json
+python3 /app/tools/extract_signatures.py /workspace/src > /workspace/.cr/signature_map.json
 ```
 
 The `tools/` directory is copied into the Docker image alongside `commands/`, `src/`, and `templates/`.

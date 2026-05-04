@@ -19,7 +19,13 @@ The agent calls `python vcs.py <subcommand>` during Phase 1. `post_findings.py` 
 
 ### --include-replies Flag
 
-The `list-threads` subcommand accepts an optional `--include-replies` flag. When set, the output includes the full reply chain for each thread (not just the top-level comment). This is used by the agent during fix verification to read developer responses for justified/deferred classification.
+The `list-threads` subcommand accepts an optional `--include-replies` flag. When set, the activity populates the `replies` field on each `ExistingCommentThread` with the full reply chain (list of `{author, content, date}` dicts). This is used by the agent during fix verification (Step 6 of `review-pr-core.md`) to read developer responses for reply-aware classification into justified/deferred/still_present statuses.
+
+### cr-id and Developer Reply Awareness
+
+Each thread returned by `list-threads` includes:
+- `cr_id` -- extracted from `<!-- cr-id: xxx -->` markers in the comment body
+- `replies` -- (when `--include-replies` is set) developer replies that inform fix verification classification
 
 ## Auth
 

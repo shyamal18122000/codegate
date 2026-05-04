@@ -41,10 +41,6 @@ mkdir -p /workspace/.cr
 
 # Copy project instruction files into workspace if not already present
 # (CI mounts the repo at /workspace — these are the agent bootstrap files)
-if [[ -f "/app/AGENTS.md" && ! -f "/workspace/AGENTS.md" ]]; then
-    cp /app/AGENTS.md /workspace/AGENTS.md
-fi
-
 if [[ "$AGENT" == "claude" && -f "/app/PROJECT-CLAUDE.md" && ! -f "/workspace/CLAUDE.md" ]]; then
     cp /app/PROJECT-CLAUDE.md /workspace/CLAUDE.md
 fi
@@ -62,8 +58,7 @@ REVIEW_PROMPT_PATH="/app/commands/review-pr-core.md"
 
 case "$AGENT" in
     codex)
-        # OpenAI Codex — reads AGENTS.md for project instructions
-        # Pass the review prompt as the task; Codex uses AGENTS.md for context
+        # OpenAI Codex — pass the review prompt as the task
         codex \
             --model "${CODEX_MODEL:-o3}" \
             --approval-policy auto-edit \
@@ -115,9 +110,7 @@ DRY_RUN_FLAG="${DRY_RUN:+--dry-run}"
 
 python3 /app/src/post_findings.py \
     --findings "$FINDINGS_PATH" \
-    --vcs "$VCS" \
-    --pr "$PR_ID" \
-    --repo "$REPO" \
+    --workspace /workspace \
     --commit-id "${COMMIT_ID:-}" \
     ${DRY_RUN_FLAG:-}
 
