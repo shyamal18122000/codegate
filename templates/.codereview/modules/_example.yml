@@ -1,0 +1,43 @@
+# Module-specific configuration example
+# Copy this file (without the leading underscore) and customize for a specific path glob.
+# Files whose names start with _ are ignored by the agent.
+#
+# All fields are optional except path_glob.
+
+# path_glob: "src/auth/**"
+# Required. Glob pattern matching files this config applies to.
+# More specific globs take precedence when multiple modules match the same file.
+
+# severity_shift: 1
+# Shift the severity of all findings in matched files by N levels.
+# Positive = more severe, negative = less severe.
+# Capped at critical (high end) and suggestion (low end).
+# Examples: severity_shift: 1  shifts warning → critical, suggestion → warning
+
+# focus_categories: ["security", "correctness"]
+# Increase confidence by 0.1 (capped at 1.0) for findings in these categories.
+# Use this to surface more findings in areas that matter most for this module.
+
+# always_flag: ["hardcoded secret", "raw SQL"]
+# Raise confidence to max(current, 0.9) for findings whose title contains one of these strings.
+# Case-insensitive substring match.
+
+# never_flag: ["missing docstring", "line too long"]
+# Skip findings whose title contains one of these strings (case-insensitive substring match).
+# These are silently dropped — NOT added to suppressed_findings.
+
+# min_confidence: 0.8
+# Override the repo-level min_confidence threshold for matched files.
+# Use a higher value (0.8–0.9) to reduce noise in stable, low-churn modules.
+
+# max_per_file: 3
+# Override the per-file finding cap for matched files.
+# Use a lower value to keep noisy modules from drowning out the review.
+
+# inherit_dismissed: true
+# Whether dismissed patterns from .codereview/dismissed.jsonl apply to this module.
+# Default: true. Set to false to force all findings regardless of dismissed list.
+
+# force_modes: ["security", "chore"]
+# Add these review modes to the active set for all matched files,
+# regardless of what modes were inferred from the PR diff.

@@ -1,0 +1,70 @@
+# .codereview-rules.yml — Project-specific deterministic review rules
+#
+# Place this file at the root of your repository. The CODEGATE review agent
+# reads it during Step 1 and applies all rules deterministically (via rg)
+# in Step 5a-rules before its LLM-based review.
+#
+# Schema reference: commands/rules-schema.json
+#
+# Each rule requires:
+#   id          — Unique identifier, e.g. PRJ-001
+#   name        — Short descriptive name
+#   description — Human-readable explanation
+#   file_glob   — Glob of files this rule applies to
+#   severity    — critical | warning | suggestion
+#   category    — security | performance | best_practices | code_style | documentation
+#
+# Each rule must have at least one of:
+#   forbidden_pattern  — regex that must NOT appear in matching files
+#   forbidden_import   — list of import strings that must not appear
+#   pattern            — regex that MUST be present in matching files
+#
+# Optional per-rule:
+#   allowed_in  — glob of files exempt from this rule
+#
+# disable[] lists rule IDs to skip globally.
+
+rules:
+  # Example 1: forbidden_pattern — ban a dangerous function
+  - id: PRJ-001
+    name: No eval() usage
+    description: Direct use of eval() is a security risk; use ast.literal_eval() or safer alternatives.
+    file_glob: "**/*.py"
+    severity: critical
+    category: security
+    forbidden_pattern: "\\beval\\s*\\("
+
+  # Example 2: forbidden_import — ban a deprecated library
+  - id: PRJ-002
+    name: No legacy requests-toolbelt import
+    description: requests-toolbelt is deprecated in this project; use httpx instead.
+    file_glob: "**/*.py"
+    severity: warning
+    category: best_practices
+    forbidden_import:
+      - requests_toolbelt
+
+  # Example 3: required pattern — every module must have an __all__ export list
+  - id: PRJ-003
+    name: Module must define __all__
+    description: All public modules must declare __all__ to control their public API.
+    file_glob: "src/**/__init__.py"
+    severity: suggestion
+    category: code_style
+    pattern: "__all__"
+    # Allow test helpers to skip this requirement
+    # allowed_in: "tests/**"
+
+  # Example 4: forbidden_pattern with allowed_in exemption
+  - id: PRJ-004
+    name: No print() in production code
+    description: Use logging instead of print() for production output.
+    file_glob: "src/**/*.py"
+    severity: warning
+    category: best_practices
+    forbidden_pattern: "\\bprint\\s*\\("
+    allowed_in: "src/debug/**"
+
+# Disable specific rule IDs globally (e.g. during a migration period):
+disable: []
+#  - PRJ-003

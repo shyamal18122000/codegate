@@ -1,0 +1,78 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "CODEGATE/rules-schema.json",
+  "title": "CodeReviewRules",
+  "description": "Schema for .codereview-rules.yml — project-specific deterministic review rules.",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "rules": {
+      "type": "array",
+      "description": "List of project-specific review rules",
+      "items": { "$ref": "#/$defs/Rule" }
+    },
+    "disable": {
+      "type": "array",
+      "description": "Rule IDs to suppress (e.g. PRJ-002)",
+      "items": { "type": "string", "pattern": "^[A-Z]+-[0-9]+$" }
+    }
+  },
+  "$defs": {
+    "Rule": {
+      "type": "object",
+      "required": ["id", "name", "description", "file_glob", "severity", "category"],
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^[A-Z]+-[0-9]+$",
+          "description": "Rule identifier, e.g. PRJ-001"
+        },
+        "name": {
+          "type": "string",
+          "description": "Short rule name"
+        },
+        "description": {
+          "type": "string",
+          "description": "Human-readable description of what this rule checks"
+        },
+        "pattern": {
+          "type": "string",
+          "description": "Regex that MUST be present in matching files (required pattern)"
+        },
+        "forbidden_pattern": {
+          "type": "string",
+          "description": "Regex that must NOT appear in matching files"
+        },
+        "forbidden_import": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Import strings that must not appear in matching files"
+        },
+        "allowed_in": {
+          "type": "string",
+          "description": "Glob of files exempt from this rule"
+        },
+        "file_glob": {
+          "type": "string",
+          "description": "Glob pattern selecting files this rule applies to (e.g. '**/*.py')"
+        },
+        "severity": {
+          "type": "string",
+          "enum": ["critical", "warning", "suggestion"],
+          "description": "Finding severity when rule is violated"
+        },
+        "category": {
+          "type": "string",
+          "enum": ["security", "performance", "best_practices", "code_style", "documentation"],
+          "description": "Finding category"
+        }
+      },
+      "anyOf": [
+        { "required": ["pattern"] },
+        { "required": ["forbidden_pattern"] },
+        { "required": ["forbidden_import"] }
+      ]
+    }
+  }
+}

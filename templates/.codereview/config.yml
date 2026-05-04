@@ -1,0 +1,23 @@
+# CODEGATE per-directory configuration (alternative location to .codereview.yml).
+# Copy this file to .codereview/config.yml in your repository and customize.
+
+# Minimum star rating required to pass CI (1–5).
+min_star_rating: 3
+
+# Fail the build if any critical-severity finding is posted.
+fail_on_critical: true
+
+# Maximum findings to post.
+# max_findings: 30
+
+# Per-file finding cap.
+# max_per_file: 5
+
+# Minimum confidence threshold for posting a finding.
+# min_confidence: 0.7
+
+# How Phase 2 delivers learning updates (dismissed findings + auto-patterns).
+# "comment" — post as PR comment suggestion (default, safest)
+# "commit"  — write files directly to workspace (CI must commit)
+# "none"    — disable learning write-back entirely
+learning_delivery: comment
